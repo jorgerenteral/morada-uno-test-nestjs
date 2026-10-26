@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { User } from '../users/user.entity.js';
 import { Book } from './book.entity.js';
+import { CreateBookDto } from './create-book.dto.js';
 import { ListBooksQuery } from './list-books.query.js';
 
 @Injectable()
@@ -50,6 +52,34 @@ export class BooksService {
     }
 
     return book;
+  }
+
+  /** Every non-deleted book of the author, drafts included. */
+  findByAuthor(author: User): Promise<Book[]> {
+    return this.books.find({
+      where: { authorId: author.id },
+      relations: { author: true },
+      order: { id: 'ASC' },
+    });
+  }
+
+  /** Books are always created as drafts; publishing is a later PATCH. */
+  async createDraft(author: User, dto: CreateBookDto): Promise<Book> {
+    const draft = await this.books.save(
+      this.books.create({
+        title: dto.title,
+        description: dto.description,
+        price: dto.price,
+        coverImageUrl: dto.cover_image_url ?? null,
+        published: false,
+        authorId: author.id,
+      }),
+    );
+
+    return this.books.findOneOrFail({
+      where: { id: draft.id },
+      relations: { author: true },
+    });
   }
 }
 
