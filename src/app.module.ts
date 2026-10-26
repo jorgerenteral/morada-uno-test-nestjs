@@ -5,6 +5,7 @@ import configuration from './config/configuration.js';
 import { AuthModule } from './auth/auth.module.js';
 import { BooksModule } from './books/books.module.js';
 import { DatabaseModule } from './database/database.module.js';
+import { NegotiationModule } from './negotiation/negotiation.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     BooksModule,
     DatabaseModule,
+    NegotiationModule,
   ],
 })
 export class AppModule {}
