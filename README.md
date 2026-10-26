@@ -1,226 +1,205 @@
-### Objetivo
+# Wookie Books API
 
-Tu asignación es implementar una API REST de librería (bookstore).
+API REST de librería (bookstore) construida con **NestJS**, TypeORM y SQLite, donde los autores publican sus aventuras y los lectores las navegan sin autenticarse. El enunciado original de la asignación está en [`docs/assignment.md`](docs/assignment.md).
 
-### Contexto
+## Requisitos
 
-Lohgarra, una Wookie de Kashyyyk, tiene una gran idea. Quiere construir un marketplace que le permita a ella y a sus amigos autopublicar sus aventuras y venderlas en línea a otros Wookies. Las ganancias se recolectarían y se donarían para comprar suministros médicos para un asentamiento Ewok en situación de pobreza.
+- Node.js 22 o superior
+- npm 10 o superior
 
-### Tareas
+La base de datos es un archivo SQLite, así que no hace falta instalar nada más.
 
--   Implementar una API REST que devuelva **JSON por defecto**
-    -   **Bonus**: Soportar negociación del formato de respuesta vía el header `Accept`:
-        -   `Accept: application/json` → JSON
-        -   `Accept: application/xml` → XML
-        -   Si el formato solicitado no es soportado, devolver `406 Not Acceptable`
--   Implementar un modelo de usuario personalizado con un campo de "seudónimo de autor" (author pseudonym)
--   Implementar un modelo de libro con los siguientes campos:
-    -   `title` (string, requerido)
-    -   `description` (text, requerido)
-    -   `author` (llave foránea al modelo de usuario personalizado)
-    -   `cover_image_url` (string de URL, opcional) - almacenar como URL, no como archivo subido
-    -   `price` (decimal, requerido)
-    -   `published` (boolean, default: false) - controla la visibilidad en los endpoints públicos
-    -   `deleted_at` (datetime, nullable) - **marcador de borrado lógico (soft delete)**; cuando está definido, el libro se considera eliminado
--   Proveer un endpoint para autenticarse contra la API usando usuario/contraseña y devolver un JWT
--   Implementar la **navegación pública de libros** en `/books`:
-    -   No requiere autenticación
-    -   Solo GET (listado y detalle)
-    -   Solo devuelve libros donde `published=true` **y** `deleted_at` es null
-    -   Soportar filtrado vía parámetros de query:
-        -   `search`: coincidencia de subcadena, insensible a mayúsculas/minúsculas, contra **title** o **description**
-        -   `author`: coincidencia exacta, insensible a mayúsculas/minúsculas, contra el **seudónimo** del autor
-    -   Ejemplos:
-        -   `/books?search=adventure` devuelve libros con "adventure" en el título o la descripción
-        -   `/books?author=lohgarra` devuelve solo libros con seudónimo "Lohgarra"
-        -   `/books?search=wookie&author=lohgarra` aplica ambos filtros (AND)
--   Implementar los **endpoints autenticados de autor** en `/me/books`:
-    -   Requiere autenticación con JWT
-    -   Requeridos: `GET /me/books` (listado), `POST /me/books`, `PATCH /me/books/{id}`, `DELETE /me/books/{id}`
-    -   Opcional: `GET /me/books/{id}` (detalle) - no es requerido para esta asignación
-    -   `POST /me/books` crea un libro nuevo como borrador (`published=false`)
-    -   `PATCH /me/books/{id}` puede actualizar campos, incluyendo establecer `published=true`
-    -   `DELETE /me/books/{id}` realiza un **borrado lógico** (establece `deleted_at` con el timestamp actual)
--   Implementar pruebas de API para todos los endpoints (ver los requerimientos más abajo)
+## Instalación
 
-### Especificación de la API
-
-#### Usuarios semilla (para pruebas locales/dev)
-
-Crear los siguientes usuarios en tu base de datos de desarrollo (vía fixtures, migraciones o un management command):
-
-| Usuario | Contraseña | Seudónimo |
-|----------|----------|-----------|
-| `lohgarra` | `rwaaaaawr` | Lohgarra |
-| `chewbacca` | `rrwwwgggh` | Chewbacca |
-| `darth_vader` | `iwanttopublish` | Darth Vader |
-
-#### Libros semilla (para pruebas locales/dev)
-
-Crear los siguientes libros para permitir pruebas manuales y revisión consistentes:
-
-| ID | Título | Autor | Publicado | Eliminado |
-|----|-------|--------|-----------|---------|
-| 1 | "Adventures on Kashyyyk" | lohgarra | ✅ sí | no |
-| 2 | "Life Debt: A Wookie Story" | lohgarra | ✅ sí | no |
-| 3 | "My Draft Manuscript" | lohgarra | no (borrador) | no |
-| 4 | "Deleted Memories" | lohgarra | ✅ sí | ✅ sí |
-| 5 | "Smuggler's Run" | chewbacca | ✅ sí | no |
-
-Esto permite que los revisores verifiquen de inmediato:
-- `/books` devuelve los IDs 1, 2, 5 (publicados + no eliminados)
-- `/books?author=lohgarra` devuelve solo los IDs 1, 2
-- `/books?search=wookie` devuelve solo el ID 2
-- `/me/books` (como lohgarra) devuelve los IDs 1, 2, 3 (excluye el ID 4 eliminado)
-
-(El filtrado vía `author=lohgarra` debe ser insensible a mayúsculas/minúsculas.)
-
-#### Autenticación
-
-```
-POST /auth/token
-Request:  {"username": "lohgarra", "password": "rwaaaaawr"}
-Response: {"access_token": "eyJ...", "token_type": "bearer"}
-Status:   200 OK (éxito), 401 Unauthorized (credenciales inválidas)
+```bash
+npm install
+cp .env.example .env
+npm run seed
 ```
 
-#### Endpoints públicos
+`npm run seed` crea la base de datos con los usuarios y libros del enunciado (es idempotente, se puede repetir).
 
-```
-GET /books
-Response: Un arreglo JSON de objetos Book (ver el esquema más abajo)
-Status:   200 OK
+> El proyecto incluye un `.npmrc` con `legacy-peer-deps=true`, necesario para que npm resuelva los peer dependencies de Vite 8.
 
-GET /books/{id}
-Response: Un solo objeto Book
-Status:   200 OK, 404 Not Found (o si está eliminado/no publicado)
+## Ejecución
 
-GET /books?search=adventure&author=lohgarra
-Response: Lista filtrada de libros publicados y no eliminados que cumplan los criterios
+```bash
+npm run start:dev   # con recarga automática
+# o
+npm run build && npm run start:prod
 ```
 
-**El objeto Book (endpoints públicos) DEBE incluir:**
-```json
-{
-  "id": 1,
-  "title": "Adventures on Kashyyyk",
-  "description": "A thrilling tale of...",
-  "author_pseudonym": "Lohgarra",
-  "cover_image_url": "https://example.com/cover.jpg",
-  "price": "9.99",
-  "published": true
-}
+La API queda disponible en `http://localhost:3000`.
+
+### Configuración
+
+Las variables se leen del entorno o de un archivo `.env` (ver [`.env.example`](.env.example)):
+
+| Variable               | Descripción                                                    | Default             |
+|------------------------|----------------------------------------------------------------|---------------------|
+| `PORT`                 | Puerto HTTP                                                    | `3000`              |
+| `DATABASE_PATH`        | Archivo SQLite                                                 | `bookstore.sqlite`  |
+| `DATABASE_SYNCHRONIZE` | Crea/actualiza el esquema al arrancar                          | `true`              |
+| `JWT_SECRET`           | Secreto con el que se firman los tokens (HS256)                | solo para desarrollo |
+| `JWT_TTL`              | Segundos de vigencia del token                                 | `3600`              |
+| `BCRYPT_ROUNDS`        | Costo del hash de contraseñas                                  | `10`                |
+
+Con `NODE_ENV=production` la aplicación no arranca si falta `JWT_SECRET`.
+
+### Datos semilla
+
+| Usuario       | Contraseña       | Seudónimo    |
+|---------------|------------------|--------------|
+| `lohgarra`    | `rwaaaaawr`      | Lohgarra     |
+| `chewbacca`   | `rrwwwgggh`      | Chewbacca    |
+| `darth_vader` | `iwanttopublish` | Darth Vader  |
+
+| ID | Título                      | Autor     | Publicado | Eliminado |
+|----|-----------------------------|-----------|-----------|-----------|
+| 1  | Adventures on Kashyyyk      | lohgarra  | sí        | no        |
+| 2  | Life Debt: A Wookie Story   | lohgarra  | sí        | no        |
+| 3  | My Draft Manuscript         | lohgarra  | no        | no        |
+| 4  | Deleted Memories            | lohgarra  | sí        | sí        |
+| 5  | Smuggler's Run              | chewbacca | sí        | no        |
+
+## Pruebas
+
+```bash
+npm test            # unitarias (entidades, validación, negociación, XML)
+npm run test:e2e    # pruebas de API de todos los endpoints (supertest)
+npm run lint
 ```
 
-Notas:
-- `cover_image_url` es un string de URL o `null`
-- `price` DEBE ser un string con 2 decimales (por ejemplo, `"9.99"`) para evitar problemas de precisión de punto flotante
-- Los endpoints públicos nunca exponen `deleted_at`
+Las pruebas usan SQLite en memoria y cubren autenticación, autorización, validación, borrado lógico, búsqueda y filtro por autor, la regla de Darth Vader, la negociación de formato y los datos semilla.
 
-#### Endpoints autenticados (requieren Bearer token)
+## Endpoints
 
-```
-GET /me/books
-Response: Todos los libros no eliminados del usuario autenticado (borradores y publicados)
-Status:   200 OK, 401 Unauthorized
+| Método   | Ruta              | Auth | Descripción                                                  |
+|----------|-------------------|------|--------------------------------------------------------------|
+| `POST`   | `/auth/token`     | no   | Login con usuario/contraseña, devuelve un JWT                |
+| `GET`    | `/books`          | no   | Libros publicados y no eliminados. Filtros `search` y `author` |
+| `GET`    | `/books/{id}`     | no   | Detalle de un libro público                                  |
+| `GET`    | `/me/books`       | sí   | Libros no eliminados del usuario (borradores y publicados)   |
+| `POST`   | `/me/books`       | sí   | Crea un libro como borrador                                  |
+| `GET`    | `/me/books/{id}`  | sí   | Detalle de un libro propio (opcional)                        |
+| `PATCH`  | `/me/books/{id}`  | sí   | Actualiza campos, incluido `published`                       |
+| `DELETE` | `/me/books/{id}`  | sí   | Borrado lógico (`deleted_at`), responde `204`                |
 
-POST /me/books
-Request:  {"title": "...", "description": "...", "price": "9.99", "cover_image_url": "..."}
-Response: {"id": 1, "title": "...", "published": false, "deleted_at": null, ...}
-Status:   201 Created, 400 Bad Request (validación), 401 Unauthorized
-Notas:
-- El servidor SIEMPRE debe crear los libros nuevos como borradores (`published=false`)
-- Si el request incluye `"published": true`, devolver 400 Bad Request:
-  {"error": "validation_error", "message": "Cannot publish on create. Use PATCH to publish."}
+### Ejemplos
 
-PATCH /me/books/{id}
-Request:  {"published": true}  // o cualquier campo actualizable
-Response: {"id": 1, ..., "published": true}
-Status:   200 OK, 400 Bad Request, 403 Forbidden (no es el dueño), 404 Not Found
+```bash
+# Login
+curl -s -X POST localhost:3000/auth/token \
+  -H 'Content-Type: application/json' \
+  -d '{"username": "lohgarra", "password": "rwaaaaawr"}'
+# {"access_token": "eyJ...", "token_type": "bearer"}
 
-DELETE /me/books/{id}
-Response: {} (cuerpo vacío)
-Status:   204 No Content, 403 Forbidden (no es el dueño), 404 Not Found
-Nota:     Borrado lógico - establece `deleted_at` con el timestamp actual. NO elimina de la base de datos.
-          Después del borrado, el libro ya no aparece en GET /me/books ni en GET /books.
-```
+TOKEN=eyJ...
 
-**El objeto Book (endpoints autenticados) DEBE incluir:**
-```json
-{
-  "id": 1,
-  "title": "Adventures on Kashyyyk",
-  "description": "A thrilling tale of...",
-  "author_pseudonym": "Lohgarra",
-  "cover_image_url": null,
-  "price": "9.99",
-  "published": false,
-  "deleted_at": null
-}
+# Catálogo público con filtros (insensibles a mayúsculas)
+curl 'localhost:3000/books?search=wookie&author=lohgarra'
+
+# Crear un borrador y publicarlo
+curl -X POST localhost:3000/me/books \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"title": "My story", "description": "...", "price": "9.99"}'
+
+curl -X PATCH localhost:3000/me/books/6 \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"published": true}'
+
+# Formato XML
+curl -H 'Accept: application/xml' localhost:3000/books/1
 ```
 
-#### Formato de respuesta de error
+### Búsqueda y filtros
 
-Todas las respuestas que no sean 2xx DEBEN devolver un cuerpo JSON con este formato:
+- `search`: subcadena, sin distinguir mayúsculas, contra `title` o `description`. Los comodines `%` y `_` se tratan literalmente.
+- `author`: coincidencia exacta, sin distinguir mayúsculas, contra el seudónimo del autor.
+- Ambos se combinan con AND.
+
+SQLite solo normaliza mayúsculas ASCII en `LOWER()`; con otra base de datos el comportamiento depende del collation.
+
+### Campos de un libro
+
+Los endpoints públicos devuelven `id`, `title`, `description`, `author_pseudonym`, `cover_image_url`, `price` y `published`. Los endpoints autenticados añaden `deleted_at`. `price` siempre es un string con dos decimales (`"9.99"`).
+
+Al crear: `title`, `description` y `price` son obligatorios; `cover_image_url` es opcional y debe ser una URL `http(s)`. `price` acepta string o número, con máximo 2 decimales. Enviar `"published": true` en el `POST` responde `400` (usa `PATCH` para publicar). Los campos desconocidos (como `author_id`) se ignoran.
+
+### Formato de respuesta
+
+JSON por defecto. Con el header `Accept` se negocia el formato:
+
+| `Accept`                           | Resultado                  |
+|------------------------------------|----------------------------|
+| ausente, `*/*`, `application/json` | JSON                       |
+| `application/xml`                  | XML                        |
+| cualquier otro (p. ej. `text/csv`) | `406 Not Acceptable`       |
+
+Se respetan los valores `q` (`application/xml;q=0.9, application/json;q=0.5` devuelve XML). Los errores siempre se devuelven en JSON, como exige el contrato de errores.
+
+### Errores
+
+Toda respuesta que no sea 2xx tiene este formato:
 
 ```json
 {
   "error": "validation_error",
-  "message": "Title is required",
-  "details": {"field": "title", "code": "required"}
+  "message": "title is required",
+  "details": {
+    "field": "title",
+    "code": "required",
+    "errors": {"title": ["title should not be empty"]}
+  }
 }
 ```
 
-Lineamientos:
-- `error`: string legible por máquina (por ejemplo, `validation_error`, `unauthorized`, `forbidden`, `not_found`)
-- `message`: resumen legible por humanos
-- `details`: objeto opcional con información estructurada (errores por campo, etc.)
+| Status | `error`              | Cuándo                                                       |
+|--------|----------------------|--------------------------------------------------------------|
+| 400    | `validation_error`   | Datos inválidos o faltantes                                  |
+| 401    | `unauthorized`       | Credenciales inválidas, token ausente, inválido o expirado   |
+| 403    | `forbidden`          | El libro no es del usuario, o Darth Vader intenta publicar   |
+| 404    | `not_found`          | Libro inexistente, eliminado o (en público) no publicado     |
+| 406    | `not_acceptable`     | Formato solicitado en `Accept` no soportado                  |
+| 500    | `server_error`       | Error inesperado (el detalle solo se escribe en el log)      |
 
-### Requerimientos de pruebas
+`details` solo aparece en errores de validación.
 
-Implementar pruebas de API que cubran como mínimo:
+### Regla de Darth Vader
 
--   **Autenticación**:
-    -   Un login válido devuelve un JWT
-    -   Credenciales inválidas devuelven 401
-    -   Token faltante o inválido devuelve 401 en endpoints protegidos
--   **Autorización**:
-    -   Los usuarios no pueden modificar/eliminar libros que no les pertenecen (403)
-    -   Los libros eliminados devuelven 404 en los endpoints públicos
-    -   Los libros no publicados devuelven 404 en los endpoints públicos
--   **Validación**:
-    -   Los campos requeridos faltantes devuelven 400 con un mensaje de error claro
-    -   Intentar establecer `published=true` en el POST devuelve 400
--   **Lógica de negocio**:
-    -   Borrado lógico: después del DELETE, el libro tiene `deleted_at` establecido y se excluye de todos los endpoints GET
-    -   Búsqueda: devuelve solo los libros publicados y no eliminados que coincidan
-    -   Filtro de autor: coincide por seudónimo (insensible a mayúsculas/minúsculas)
+El usuario `darth_vader` no puede publicar libros. Cualquier `PATCH` con `"published": true` responde:
 
-### Criterios de evaluación
+```json
+{"error": "forbidden", "message": "Darth Vader is not allowed to publish on Wookie Books"}
+```
 
--   **Calidad del código**: Código limpio y legible con una arquitectura sensata
--   **Diseño de la API**: Convenciones RESTful, manejo de errores consistente, códigos de estado correctos
--   **Seguridad**: Autenticación adecuada, verificaciones de autorización (los usuarios solo pueden modificar sus propios libros)
--   **Pruebas**: Cobertura de pruebas exhaustiva para el comportamiento de todos los endpoints
--   **Documentación**: README claro con instrucciones de instalación y ejecución
+Puede crear, editar, despublicar y eliminar sus borradores con normalidad.
 
-#### Bonus
+## Decisiones de diseño
 
--   **Regla de Darth Vader**: El usuario con username `darth_vader` no debe poder publicar libros.
+- **JWT**: tokens HS256 emitidos con `@nestjs/jwt` y verificados con `passport-jwt`. `JwtAuthGuard` rechaza con `401` los tokens ausentes, mal formados, expirados o de usuarios que ya no existen. No hay sesiones ni cookies.
+- **Contraseñas**: se guardan con bcrypt (`bcryptjs`), nunca en claro.
+- **Borrado lógico**: la entidad `Book` usa `@DeleteDateColumn` sobre `deleted_at`; TypeORM excluye esos libros de cualquier consulta por defecto (y devuelven `404` al accederlos directamente).
+- **Autorización**: `OwnBookGuard` carga el libro de `/me/books/:id` y verifica que pertenezca al usuario. Es un guard (y no una comprobación dentro del handler) para decidirlo antes de validar el cuerpo: un tercero recibe `403` y no detalles de validación. La regla de Darth Vader vive en `BooksService.update`.
+- **Errores**: `ApiExceptionFilter` convierte cualquier excepción al formato de error de la API, y la validación (`class-validator`) responde `400` con `details.field` y `details.code`.
+- **Negociación de formato**: `NegotiationGuard` (global) corre antes que los guards de autenticación y rechaza con `406`; `XmlInterceptor` serializa las respuestas exitosas a XML. Las listas usan elementos `<item>` y los `null` se marcan con `nil="true"`. Los headers de navegador (`text/html,...,application/xml;q=0.9,*/*;q=0.8`) se interpretan como JSON.
+- **Esquema**: `synchronize` crea las tablas al arrancar, lo que basta para esta asignación. Para producción conviene desactivarlo (`DATABASE_SYNCHRONIZE=false`) y usar migraciones.
+- **Listados sin paginar**: el contrato pide un arreglo JSON, por lo que el listado devuelve todos los libros que coinciden.
 
-    Publicar se define como cualquier request que resulte en `published=true`:
-    -   `PATCH /me/books/{id}` con `{"published": true}`
+## Estructura
 
-    Cuando Darth Vader intente publicar, devolver:
-    ```json
-    {"error": "forbidden", "message": "Darth Vader is not allowed to publish on Wookie Books"}
-    ```
-    Status: 403 Forbidden
-
-### CodeSubmit
-
-Por favor organiza, diseña, prueba y documenta tu código como si fuera a producción, y luego sube tus cambios a la rama master. Después de haber subido tu código, puedes entregar la asignación en la página de la asignación.
-
-Mucho éxito y feliz programación,
-
-El equipo de MoradaUno
+```
+src/
+├── auth/                 # login, estrategia JWT, guard y @CurrentUser
+├── books/                # entidad, servicio, DTOs, controladores (público y /me) y OwnBookGuard
+├── common/               # filtro de errores y excepción de validación
+├── config/               # configuración desde variables de entorno
+├── database/             # seeds de desarrollo
+├── negotiation/          # Accept, guard, interceptor y encoder XML
+├── users/                # entidad y servicio de usuarios
+├── app.module.ts
+├── app.setup.ts          # pipes y filtros globales (compartidos con los tests)
+├── main.ts
+└── seed.ts               # npm run seed
+test/                     # pruebas e2e y utilidades (factories, token, app de prueba)
+```
