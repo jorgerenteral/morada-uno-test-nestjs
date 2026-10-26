@@ -1,0 +1,22 @@
+# compiled output
+/dist
+/node_modules
+
+# logs
+*.log
+npm-debug.log*
+
+# env and local data
+.env
+*.sqlite
+*.sqlite-journal
+/data
+
+# os / ide
+.DS_Store
+.idea
+.vscode
+
+# test output
+/coverage
+*.tsbuildinfo
