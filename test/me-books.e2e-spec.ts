@@ -183,4 +183,199 @@ describe('Author books (e2e)', () => {
       expect(mine.body).toEqual([]);
     });
   });
+
+  describe('GET /me/books/:id', () => {
+    it('returns an own book, drafts included', async () => {
+      const draft = await createBook(ctx, author);
+
+      const response = await http()
+        .get(`/me/books/${draft.id}`)
+        .set(headers)
+        .expect(200);
+
+      expect(response.body).toMatchObject({ id: draft.id, published: false });
+    });
+
+    it("returns 403 for someone else's book", async () => {
+      const foreign = await createBook(ctx, await createUser(ctx), {
+        published: true,
+      });
+
+      const response = await http()
+        .get(`/me/books/${foreign.id}`)
+        .set(headers)
+        .expect(403);
+
+      expect(response.body.error).toBe('forbidden');
+    });
+  });
+
+  describe('PATCH /me/books/:id', () => {
+    it('updates fields and can publish the book', async () => {
+      const book = await createBook(ctx, author, { title: 'Old', price: '5' });
+
+      const response = await http()
+        .patch(`/me/books/${book.id}`)
+        .set(headers)
+        .send({ title: 'New', price: '12.50', published: true })
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        id: book.id,
+        title: 'New',
+        price: '12.50',
+        published: true,
+      });
+      await http().get(`/books/${book.id}`).expect(200);
+    });
+
+    it('can unpublish and clear the cover', async () => {
+      const book = await createBook(ctx, author, {
+        published: true,
+        coverImageUrl: 'https://example.com/c.jpg',
+      });
+
+      const response = await http()
+        .patch(`/me/books/${book.id}`)
+        .set(headers)
+        .send({ published: false, cover_image_url: null })
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        published: false,
+        cover_image_url: null,
+      });
+      await http().get(`/books/${book.id}`).expect(404);
+    });
+
+    it('ignores attempts to change the author', async () => {
+      const book = await createBook(ctx, author);
+      const other = await createUser(ctx);
+
+      await http()
+        .patch(`/me/books/${book.id}`)
+        .set(headers)
+        .send({ author_id: other.id, authorId: other.id, title: 'Mine' })
+        .expect(200);
+
+      const mine = await http().get('/me/books').set(headers).expect(200);
+      expect(mine.body.map((b: { id: number }) => b.id)).toEqual([book.id]);
+    });
+
+    it.each([
+      ['title', { title: '' }],
+      ['title', { title: null }],
+      ['published', { published: 'maybe' }],
+      ['price', { price: '-3' }],
+    ])('returns 400 for an invalid %s', async (field, body) => {
+      const book = await createBook(ctx, author);
+
+      const response = await http()
+        .patch(`/me/books/${book.id}`)
+        .set(headers)
+        .send(body)
+        .expect(400);
+
+      expect(response.body.error).toBe('validation_error');
+      expect(response.body.details.field).toBe(field);
+    });
+
+    it('requires authentication', async () => {
+      const book = await createBook(ctx, author);
+
+      await http()
+        .patch(`/me/books/${book.id}`)
+        .send({ title: 'x' })
+        .expect(401);
+    });
+
+    it("returns 403 for someone else's book and changes nothing", async () => {
+      const foreign = await createBook(ctx, await createUser(ctx), {
+        title: 'Original',
+        published: true,
+      });
+
+      const response = await http()
+        .patch(`/me/books/${foreign.id}`)
+        .set(headers)
+        .send({ title: 'Hijacked' })
+        .expect(403);
+
+      expect(response.body.error).toBe('forbidden');
+      const stored = await http().get(`/books/${foreign.id}`).expect(200);
+      expect(stored.body.title).toBe('Original');
+    });
+
+    it('answers 403 before validating the body of a stranger', async () => {
+      const foreign = await createBook(ctx, await createUser(ctx));
+
+      await http()
+        .patch(`/me/books/${foreign.id}`)
+        .set(headers)
+        .send({ title: '' })
+        .expect(403);
+    });
+
+    it('returns 404 for unknown, malformed and deleted ids', async () => {
+      const deleted = await createBook(ctx, author, { deletedAt: new Date() });
+
+      for (const id of [999, 'abc', deleted.id]) {
+        const response = await http()
+          .patch(`/me/books/${id}`)
+          .set(headers)
+          .send({ title: 'x' })
+          .expect(404);
+
+        expect(response.body.error).toBe('not_found');
+      }
+    });
+  });
+
+  describe('DELETE /me/books/:id', () => {
+    it('soft deletes the book and hides it everywhere', async () => {
+      const book = await createBook(ctx, author, { published: true });
+
+      const response = await http()
+        .delete(`/me/books/${book.id}`)
+        .set(headers)
+        .expect(204);
+      expect(response.text).toBe('');
+
+      await http().get(`/books/${book.id}`).expect(404);
+      await http().get(`/me/books/${book.id}`).set(headers).expect(404);
+      expect((await http().get('/books').expect(200)).body).toEqual([]);
+      expect(
+        (await http().get('/me/books').set(headers).expect(200)).body,
+      ).toEqual([]);
+
+      const [row] = await ctx.dataSource.query(
+        'SELECT id, deleted_at FROM books WHERE id = ?',
+        [book.id],
+      );
+      expect(row.deleted_at).not.toBeNull();
+    });
+
+    it("returns 403 for someone else's book and keeps it", async () => {
+      const foreign = await createBook(ctx, await createUser(ctx), {
+        published: true,
+      });
+
+      await http().delete(`/me/books/${foreign.id}`).set(headers).expect(403);
+
+      await http().get(`/books/${foreign.id}`).expect(200);
+    });
+
+    it('requires authentication', async () => {
+      const book = await createBook(ctx, author);
+
+      await http().delete(`/me/books/${book.id}`).expect(401);
+    });
+
+    it('returns 404 for unknown and already deleted books', async () => {
+      const deleted = await createBook(ctx, author, { deletedAt: new Date() });
+
+      await http().delete('/me/books/999').set(headers).expect(404);
+      await http().delete(`/me/books/${deleted.id}`).set(headers).expect(404);
+    });
+  });
 });

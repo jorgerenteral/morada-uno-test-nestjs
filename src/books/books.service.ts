@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { User } from '../users/user.entity.js';
 import { Book } from './book.entity.js';
 import { CreateBookDto } from './create-book.dto.js';
+import { UpdateBookDto } from './update-book.dto.js';
 import { ListBooksQuery } from './list-books.query.js';
 
 @Injectable()
@@ -63,6 +64,14 @@ export class BooksService {
     });
   }
 
+  /** A book that has not been soft deleted, whoever owns it. */
+  findById(id: number): Promise<Book | null> {
+    return this.books.findOne({
+      where: { id },
+      relations: { author: true },
+    });
+  }
+
   /** Books are always created as drafts; publishing is a later PATCH. */
   async createDraft(author: User, dto: CreateBookDto): Promise<Book> {
     const draft = await this.books.save(
@@ -80,6 +89,28 @@ export class BooksService {
       where: { id: draft.id },
       relations: { author: true },
     });
+  }
+
+  async update(book: Book, dto: UpdateBookDto): Promise<Book> {
+    await this.books.update(book.id, {
+      ...(dto.title !== undefined && { title: dto.title }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.price !== undefined && { price: dto.price }),
+      ...(dto.cover_image_url !== undefined && {
+        coverImageUrl: dto.cover_image_url,
+      }),
+      ...(dto.published !== undefined && { published: dto.published }),
+    });
+
+    return this.books.findOneOrFail({
+      where: { id: book.id },
+      relations: { author: true },
+    });
+  }
+
+  /** Soft delete: sets `deleted_at`, the row stays in the database. */
+  async remove(book: Book): Promise<void> {
+    await this.books.softDelete(book.id);
   }
 }
 

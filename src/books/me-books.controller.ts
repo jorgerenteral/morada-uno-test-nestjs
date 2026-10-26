@@ -1,8 +1,21 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { Book } from './book.entity.js';
+import { OwnBookGuard, OwnedBook } from './own-book.guard.js';
+import { UpdateBookDto } from './update-book.dto.js';
 import { User } from '../users/user.entity.js';
-import { OwnerBook, toOwnerBook } from './book.serializer.js';
+import { toOwnerBook } from './book.serializer.js';
+import type { OwnerBook } from './book.serializer.js';
 import { BooksService } from './books.service.js';
 import { CreateBookDto } from './create-book.dto.js';
 
@@ -22,5 +35,27 @@ export class MeBooksController {
     @Body() dto: CreateBookDto,
   ): Promise<OwnerBook> {
     return toOwnerBook(await this.books.createDraft(user, dto));
+  }
+
+  @Get(':id')
+  @UseGuards(OwnBookGuard)
+  show(@OwnedBook() book: Book): OwnerBook {
+    return toOwnerBook(book);
+  }
+
+  @Patch(':id')
+  @UseGuards(OwnBookGuard)
+  async update(
+    @OwnedBook() book: Book,
+    @Body() dto: UpdateBookDto,
+  ): Promise<OwnerBook> {
+    return toOwnerBook(await this.books.update(book, dto));
+  }
+
+  @Delete(':id')
+  @UseGuards(OwnBookGuard)
+  @HttpCode(204)
+  remove(@OwnedBook() book: Book): Promise<void> {
+    return this.books.remove(book);
   }
 }
