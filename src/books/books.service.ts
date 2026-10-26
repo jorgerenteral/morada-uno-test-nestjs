@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity.js';
@@ -91,7 +95,13 @@ export class BooksService {
     });
   }
 
-  async update(book: Book, dto: UpdateBookDto): Promise<Book> {
+  async update(user: User, book: Book, dto: UpdateBookDto): Promise<Book> {
+    if (dto.published === true && user.isDarthVader()) {
+      throw new ForbiddenException(
+        'Darth Vader is not allowed to publish on Wookie Books',
+      );
+    }
+
     await this.books.update(book.id, {
       ...(dto.title !== undefined && { title: dto.title }),
       ...(dto.description !== undefined && { description: dto.description }),

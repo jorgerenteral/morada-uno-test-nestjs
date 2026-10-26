@@ -46,10 +46,11 @@ export class MeBooksController {
   @Patch(':id')
   @UseGuards(OwnBookGuard)
   async update(
+    @CurrentUser() user: User,
     @OwnedBook() book: Book,
     @Body() dto: UpdateBookDto,
   ): Promise<OwnerBook> {
-    return toOwnerBook(await this.books.update(book, dto));
+    return toOwnerBook(await this.books.update(user, book, dto));
   }
 
   @Delete(':id')
